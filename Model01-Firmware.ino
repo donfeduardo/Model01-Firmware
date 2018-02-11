@@ -25,6 +25,9 @@
 // Support for controlling the keyboard's LEDs
 #include "Kaleidoscope-LEDControl.h"
 
+// Support for LED Caps Lock mode
+#include "Kaleidoscope-CapsLock.h"
+
 // Support for "Numpad" mode, which is mostly just the Numpad specific LED mode
 #include "Kaleidoscope-NumPad.h"
 
@@ -68,8 +71,7 @@
 
 enum { MACRO_VERSION_INFO,
        MACRO_ANY,
-       MACRO_SWAP_LAYOUT,
-       MACRO_CAPSLOCK
+       MACRO_SWAP_LAYOUT
      };
 
 /** The Model 01's key layouts are defined as 'keymaps'. By default, there are three
@@ -173,23 +175,20 @@ const Key keymaps[][ROWS][COLS] PROGMEM = {
    Key_Tab,  ___,              Key_mouseUp, ___,        Key_mouseBtnR, Key_mouseWarpEnd, Key_mouseWarpNE,
    Key_Home, Key_mouseL,       Key_mouseDn, Key_mouseR, Key_mouseBtnL, Key_mouseWarpNW,
    Key_End,  Key_PrintScreen,  Key_Insert,  ___,        Key_mouseBtnM, Key_mouseWarpSW,  Key_mouseWarpSE,
-   ___, ___, ___, M(MACRO_CAPSLOCK),
+   ___, ___, ___, Key_CapsLock,
    ___,
 
    ___,                        Key_F6,                 Key_F7,                   Key_F8,                   Key_F9,          Key_F10,          Key_F11,
    Consumer_PlaySlashPause,    ___,                    Key_LeftCurlyBracket,     Key_RightCurlyBracket,    Key_LeftBracket, Key_RightBracket, Key_F12,
                                Key_LeftArrow,          Key_DownArrow,            Key_UpArrow,              Key_RightArrow,  ___,              ___,
    Consumer_ScanPreviousTrack, Consumer_ScanNextTrack, Consumer_Mute,            Consumer_VolumeDecrement, Consumer_VolumeIncrement, Key_Backslash,    Key_Pipe,
-   M(MACRO_CAPSLOCK), ___, Key_Enter, Key_Delete,
+   Key_CapsLock, ___, Key_Enter, Key_Delete,
    ___)
 
 };
 
 /* Re-enable astyle's indent enforcement */
 // *INDENT-ON*
-
-/* Define boolean for caps lock state */
-bool capsState = false;
 
 /** versionInfoMacro handles the 'firmware version info' macro
     When a key bound to the macro is pressed, this macro
@@ -246,10 +245,6 @@ const macro_t *macroAction(uint8_t macroIndex, uint8_t keyState) {
 
     case MACRO_SWAP_LAYOUT:
       swapLayoutMacro(keyState);
-      break;
-
-    case MACRO_CAPSLOCK:
-      toggleCapsLockMacro(keyState);
       break;
   }
   return MACRO_NONE;
@@ -311,26 +306,6 @@ static void swapLayoutMacro(uint8_t keyState) {
   }
 }
 
-/*
-   toggleCapsLockMacro sends a CapsLock key to the host OS.
-   It uses the capsState boolean to determine what color to turn the keyboard.
-*/
-static void toggleCapsLockMacro(uint8_t keyState) {
-  static Key lastKey;
-  lastKey.keyCode = Key_CapsLock.keyCode;
-  if (keyToggledOn(keyState)) {
-    capsState = !capsState;
-
-    if (!capsState) {
-      // Some keys seem to get "stuck" in the painted color. Reset current mode to unstick them.
-      LEDControl.set_mode(LEDControl.get_mode_index());
-    }
-  }
-  if (keyIsPressed(keyState)) {
-    kaleidoscope::hid::pressKey(lastKey);
-  }
-}
-
 /** The 'setup' function is one of the two standard Arduino sketch functions.
     It's called when your keyboard first powers up. This is where you set up
     Kaleidoscope and any plugins.
@@ -374,6 +349,9 @@ void setup() {
     // The breathe effect slowly pulses all of the LEDs on your keyboard
     &LEDBreatheEffect,
 
+    // The CapsLock plugin lights up CAPS LOCK mode in a similar way to numpad mode
+    &CapsLock,
+
     // The numpad plugin is responsible for lighting up the 'numpad' mode
     // with a custom LED effect
     &NumPad,
@@ -405,9 +383,6 @@ void setup() {
   // This avoids over-taxing devices that don't have a lot of power to share
   // with USB devices
   LEDOff.activate();
-
-  // update initial state of caps lock
-  capsState = (kaleidoscope::hid::getKeyboardLEDs() & LED_CAPS_LOCK);
 }
 
 /** loop is the second of the standard Arduino sketch functions.
@@ -418,22 +393,5 @@ void setup() {
 */
 
 void loop() {
-  if (capsState) {
-    for (uint8_t r = 0; r < ROWS; r++) {
-      for (uint8_t c = 0; c < COLS; c++) {
-        Key k = Layer.lookupOnActiveLayer(r, c);
-
-        cRGB breathColor = breath_compute();
-
-        if ((k.raw >= Key_A.raw) && (k.raw <= Key_Z.raw)) {
-          LEDControl.setCrgbAt(r, c, CRGB(255, 0, 0));
-        } else if (k == Key_LeftShift || k == Key_RightShift || k == ShiftToLayer(FUNCTION)) {
-          LEDControl.setCrgbAt(r, c, breathColor);
-        } else {
-          LEDControl.refreshAt(r, c);
-        }
-      }
-    }
-  }
   Kaleidoscope.loop();
 }
